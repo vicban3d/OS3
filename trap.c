@@ -8,6 +8,8 @@
 #include "traps.h"
 #include "spinlock.h"
 
+extern pte_t * walkpgdir(pde_t *, const void *, int);
+
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
@@ -46,6 +48,15 @@ trap(struct trapframe *tf)
     return;
   }
 
+  uint va = rcr2();
+  
+  pte_t * proc_pte;
+  if ((proc_pte = walkpgdir(proc->pgdir, &va, 0)) == 0){
+    panic("bad memory access");
+  }
+
+  pte_t * kernel_pte = walkpgdir(cpu->kpgdir, &va, 1);
+
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpu->id == 0){
@@ -78,11 +89,10 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-  //TODO - Add handler to T_PGFLT.
-      lcr3(v2p(cpu->kpgdir));
 
+    memmove((void *)kernel_pte, (void*)proc_pte, 4);
 
-   break;
+    break;
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){

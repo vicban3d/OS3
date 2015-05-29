@@ -17,6 +17,7 @@ static struct proc *initproc;
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
+extern void freekvm(pte_t *);
 
 static void wakeup1(void *chan);
 
@@ -283,6 +284,7 @@ scheduler(void)
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
+
       swtch(&cpu->scheduler, proc->context);
       switchkvm(cpu);
 
@@ -311,6 +313,7 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = cpu->intena;
+
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
