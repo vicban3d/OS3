@@ -36,6 +36,7 @@ seginit(void)
   
   // Initialize cpu-local storage.
   cpu = c;
+
   proc = 0;
 }
 
@@ -172,6 +173,7 @@ switchuvm(struct proc *p)
   ltr(SEG_TSS << 3);
   if(p->pgdir == 0)
     panic("switchuvm: no pgdir");
+  //TODO - remove this line to continue working.
   lcr3(v2p(p->pgdir));  // switch to new address space
   popcli();
 }

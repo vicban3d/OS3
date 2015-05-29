@@ -77,7 +77,12 @@ trap(struct trapframe *tf)
             cpu->id, tf->cs, tf->eip);
     lapiceoi();
     break;
-   
+  case T_PGFLT:
+  //TODO - Add handler to T_PGFLT.
+      lcr3(v2p(cpu->kpgdir));
+
+
+   break;
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){
