@@ -68,7 +68,8 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
     pgtab = (pte_t*)p2v(PTE_ADDR(*pde));    
   } else {
 
-    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0){   
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0){ 
+     // cprintf("message\n");
       return 0;
     }
     // Make sure all those PTE_P bits are zero.

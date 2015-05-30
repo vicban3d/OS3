@@ -8,8 +8,6 @@
 #include "traps.h"
 #include "spinlock.h"
 
-#define TLBSIZE 2
-
 extern pte_t * walkpgdir(pde_t *, const void *, int);
 
 // Interrupt descriptor table (shared by all CPUs).
@@ -18,7 +16,7 @@ extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
 
-pte_t * tlb[TLBSIZE];
+void * tlb[TLBSIZE];
 
 void
 tvinit(void)
@@ -90,37 +88,36 @@ trap(struct trapframe *tf)
     void * va;            // Virtual address of the sought after page,
     pte_t * kernel_pte;   // Kernel Page Directory correspondong to va.
     pte_t * proc_pte;     // Process Page Directory correspondong to va.
+    
+    // Enforce only TLBSIZE possible pages at all times using FIFO
+    // tlb[0] alway containt the va of the entry to remove.
+    if((int)tlb[0] != 0){ 
+        char * last_va = tlb[0];
+        pte_t * page;
+        if ((page = walkpgdir(cpu->kpgdir, last_va, 0)) == 0){ // Get page table address in kernel page dir.
+            panic("bad kernel memory access");
+        }
+        *page = 0;
+        kfree(last_va); // Free virtual memory.
+    }
 
-    va = (void*)rcr2();   // va is taken from cr2 register.
+    // Shift FIFO queue.
+    int index;
+    for (index=0; index<TLBSIZE-1; index++){
+       tlb[index] = tlb[index+1];
+    }
+
+    va = (void*)rcr2();   // va of the faulty page table is saved in cr2 register.
 
     if ((proc_pte = walkpgdir(proc->pgdir, va, 0)) == 0){ // Get page table address in process page dir.
-      panic("bad memory access");
+      panic("bad process memory access");
     }
 
-    kernel_pte = walkpgdir(cpu->kpgdir, va, 1); // Get page table address in kerner page dir(or allocate).
+    tlb[TLBSIZE] = va; // Store found va at the end of the queue.
+
+    kernel_pte = walkpgdir(cpu->kpgdir, va, 1); // Allocate new entry in kernel page dir.
     
-    // Enforce only 2 possible pages at all times using fifo.
-    if((int)tlb[0]){ 
-        char * va = p2v(PTE_ADDR(tlb[0]));
-        kfree(va);
-      }
-      tlb[0] = 0;
-
-      int index;
-      for (index=0; index<TLBSIZE-1; index++){
-        tlb[index] = tlb[index+1];
-      }
-    
-    tlb[TLBSIZE] = kernel_pte;
-
-    int i;
-    int c=0;
-    for (i=0; i<NPDENTRIES/2; i++){
-      if (cpu->kpgdir[i]) c++;
-    }
-
-    // Copy the process page over to the kernel page.
-    memmove((void*)kernel_pte, (void*)proc_pte, NPDENTRIES);
+    memmove((void*)kernel_pte, (void*)proc_pte, NPDENTRIES); // Copy the process page over to the kernel page.
     break;
   }
 
