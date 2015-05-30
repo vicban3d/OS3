@@ -12,12 +12,15 @@ struct segdesc gdt[NSEGS];
 
 //TODO - learn when to use freekvm.
 void freekvm(pte_t * kpgdir){
+ // cprintf("CLEARING 0x%x ", kpgdir);
   int i;
-  for (i = 0; i < 20; i++)
-  {
-      cprintf("MEM: %d\n",kpgdir[i] );
-    memset((void*)kpgdir[i], 0, 4);
+  for (i=0; i<512; i++){
+    //cprintf("%d\n", i);
+    memset(&kpgdir[i], 0, 4);
   }
+  
+  //cprintf(" DONE!\n");
+
 }
 
 // Set up CPU's kernel segment descriptors.
@@ -60,11 +63,12 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   pte_t *pgtab;
 
   pde = &pgdir[PDX(va)];
+
   if(*pde & PTE_P){    
-    pgtab = (pte_t*)p2v(PTE_ADDR(*pde));
+    pgtab = (pte_t*)p2v(PTE_ADDR(*pde));    
   } else {
 
-    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0){      
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0){   
       return 0;
     }
     // Make sure all those PTE_P bits are zero.

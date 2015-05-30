@@ -8,7 +8,11 @@
 #include "traps.h"
 #include "spinlock.h"
 
+#define TLBSIZE 2
+
 extern pte_t * walkpgdir(pde_t *, const void *, int);
+
+void * entries[TLBSIZE];
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
@@ -46,17 +50,7 @@ trap(struct trapframe *tf)
     if(proc->killed)
       exit();
     return;
-  }
-
-  uint va = rcr2();
-  
-  pte_t * proc_pte;
-  if ((proc_pte = walkpgdir(proc->pgdir, &va, 0)) == 0){
-    panic("bad memory access");
-  }
-
-  pte_t * kernel_pte = walkpgdir(cpu->kpgdir, &va, 1);
-
+  }  
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpu->id == 0){
@@ -89,10 +83,30 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
+  { 
 
-    memmove((void *)kernel_pte, (void*)proc_pte, 4);
+    
 
+    void * va;
+    pte_t * kernel_pte;
+    pte_t * proc_pte;    
+
+    va = (void*)rcr2();
+    kernel_pte = walkpgdir(cpu->kpgdir, va, 1);
+    if ((proc_pte = walkpgdir(proc->pgdir, va, 0)) == 0){
+      panic("bad memory access");
+    }
+
+    //memset(entries[0], 0, 4);
+
+   // entries[0] = entries[1];
+    //entries[1] = kernel_pte;
+  
+   // cprintf("Pagefault: [ VA: 0x%x | PPT: 0x%x | KPT: 0x%x ]\n", va, proc_pte, kernel_pte);
+    memmove((void*)kernel_pte, (void*)proc_pte, 1024);
+     
     break;
+  }
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){

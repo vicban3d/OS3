@@ -282,10 +282,14 @@ scheduler(void)
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       proc = p;
+
+      freekvm(cpu->kpgdir);
       switchuvm(p);
       p->state = RUNNING;
 
       swtch(&cpu->scheduler, proc->context);
+
+
       switchkvm(cpu);
 
       // Process is done running for now.
