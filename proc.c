@@ -17,7 +17,7 @@ static struct proc *initproc;
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
-extern void freekvm(pte_t *);
+extern void freekvm(void);
 
 static void wakeup1(void *chan);
 
@@ -281,14 +281,16 @@ scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+     
+      
+
       proc = p;
 
-      freekvm(cpu->kpgdir);
+      freekvm();
       switchuvm(p);
       p->state = RUNNING;
 
       swtch(&cpu->scheduler, proc->context);
-
 
       switchkvm(cpu);
 

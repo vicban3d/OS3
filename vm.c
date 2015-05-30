@@ -10,17 +10,15 @@
 extern char data[];  // defined by kernel.ld
 struct segdesc gdt[NSEGS];
 
-//TODO - learn when to use freekvm.
-void freekvm(pte_t * kpgdir){
- // cprintf("CLEARING 0x%x ", kpgdir);
-  int i;
-  for (i=0; i<512; i++){
-    //cprintf("%d\n", i);
-    memset(&kpgdir[i], 0, 4);
-  }
-  
-  //cprintf(" DONE!\n");
-
+void freekvm(){
+    int i;
+    for(i = 0; i < NPDENTRIES/2; i++){
+      if(cpu->kpgdir[i] & PTE_P){
+        char * va = p2v(PTE_ADDR(cpu->kpgdir[i]));
+        kfree(va);
+      }
+      cpu->kpgdir[i] = 0;
+    }
 }
 
 // Set up CPU's kernel segment descriptors.
@@ -43,6 +41,8 @@ seginit(void)
 
   // Map cpu, and curproc
   c->gdt[SEG_KCPU] = SEG(STA_W, &c->cpu, 8, 0);
+
+  memset(c->kpgdir, 0, 100);
 
   lgdt(c->gdt, sizeof(c->gdt));
   loadgs(SEG_KCPU << 3);

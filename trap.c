@@ -12,13 +12,13 @@
 
 extern pte_t * walkpgdir(pde_t *, const void *, int);
 
-void * entries[TLBSIZE];
-
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
+
+pte_t * tlb[TLBSIZE];
 
 void
 tvinit(void)
@@ -82,31 +82,48 @@ trap(struct trapframe *tf)
             cpu->id, tf->cs, tf->eip);
     lapiceoi();
     break;
-  case T_PGFLT:
+  case T_PGFLT: // Handle Page Fault Exception.
   { 
 
-    
+    //TODO - sometimes crashed when using alot of ls.
 
-    void * va;
-    pte_t * kernel_pte;
-    pte_t * proc_pte;    
+    void * va;            // Virtual address of the sought after page,
+    pte_t * kernel_pte;   // Kernel Page Directory correspondong to va.
+    pte_t * proc_pte;     // Process Page Directory correspondong to va.
 
-    va = (void*)rcr2();
-    kernel_pte = walkpgdir(cpu->kpgdir, va, 1);
-    if ((proc_pte = walkpgdir(proc->pgdir, va, 0)) == 0){
+    va = (void*)rcr2();   // va is taken from cr2 register.
+
+    if ((proc_pte = walkpgdir(proc->pgdir, va, 0)) == 0){ // Get page table address in process page dir.
       panic("bad memory access");
     }
 
-    //memset(entries[0], 0, 4);
+    kernel_pte = walkpgdir(cpu->kpgdir, va, 1); // Get page table address in kerner page dir(or allocate).
+    
+    // Enforce only 2 possible pages at all times using fifo.
+    if((int)tlb[0] & PTE_P){ 
+        char * va = p2v(PTE_ADDR(tlb[0]));
+        kfree(va);
+      }
+      tlb[0] = 0;
 
-   // entries[0] = entries[1];
-    //entries[1] = kernel_pte;
-  
-   // cprintf("Pagefault: [ VA: 0x%x | PPT: 0x%x | KPT: 0x%x ]\n", va, proc_pte, kernel_pte);
-    memmove((void*)kernel_pte, (void*)proc_pte, 1024);
-     
+      int index;
+      for (index=0; index<TLBSIZE-1; index++){
+        tlb[index] = tlb[index+1];
+      }
+    
+    tlb[TLBSIZE] = kernel_pte;
+
+    int i;
+    int c=0;
+    for (i=0; i<NPDENTRIES/2; i++){
+      if (cpu->kpgdir[i]) c++;
+    }
+
+    // Copy the process page over to the kernel page.
+    memmove((void*)kernel_pte, (void*)proc_pte, NPDENTRIES);
     break;
   }
+
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){
