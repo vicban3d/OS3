@@ -100,7 +100,7 @@ trap(struct trapframe *tf)
     kernel_pte = walkpgdir(cpu->kpgdir, va, 1); // Get page table address in kerner page dir(or allocate).
     
     // Enforce only 2 possible pages at all times using fifo.
-    if((int)tlb[0] & PTE_P){ 
+    if((int)tlb[0]){ 
         char * va = p2v(PTE_ADDR(tlb[0]));
         kfree(va);
       }
