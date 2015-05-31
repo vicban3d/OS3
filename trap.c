@@ -8,15 +8,13 @@
 #include "traps.h"
 #include "spinlock.h"
 
-extern pte_t * walkpgdir(pde_t *, const void *, int);
+extern pte_t * walkpgdir(pde_t *, void *, int);
 
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
-
-void * tlb[TLBSIZE];
 
 void
 tvinit(void)
@@ -48,7 +46,8 @@ trap(struct trapframe *tf)
     if(proc->killed)
       exit();
     return;
-  }  
+  }
+
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpu->id == 0){
@@ -80,47 +79,64 @@ trap(struct trapframe *tf)
             cpu->id, tf->cs, tf->eip);
     lapiceoi();
     break;
-  case T_PGFLT: // Handle Page Fault Exception.
+
+    case T_PGFLT: // Handle Page Fault Exception.
   { 
-
-    //TODO - sometimes crashed when using alot of ls.
-
-    void * va;            // Virtual address of the sought after page,
-    pte_t * kernel_pte;   // Kernel Page Directory correspondong to va.
-    pte_t * proc_pte;     // Process Page Directory correspondong to va.
+    //cprintf("[%p][%p]\n", tlb[0], tlb[1]);
+    pushcli();
+    uint va;              // Virtual address of the sought after page,
+    pte_t * kernel_pte;     // Kernel Page Directory correspondong to va.
+    pte_t * proc_pte;       // Process Page Directory correspondong to va.
+    pte_t * old_kernel_pte; // the pte of the oldest saved entry.
+    uint old_va;      // the va of the oldest saved entry.
     
+    va = rcr2();    // va of the faulty page table is saved in cr2 register.
+
     // Enforce only TLBSIZE possible pages at all times using FIFO
     // tlb[0] alway containt the va of the entry to remove.
-    if((int)tlb[0] != 0){ 
-        char * last_va = tlb[0];
-        pte_t * page;
-        if ((page = walkpgdir(cpu->kpgdir, last_va, 0)) == 0){ // Get page table address in kernel page dir.
-            panic("bad kernel memory access");
-        }
-        *page = 0;
-        kfree(last_va); // Free virtual memory.
+
+    if (cpu->tlb_pages < 2){
+      cpu->tlb_pages++;
     }
+    else {
+      old_va = cpu->tlb[0];   // va of the next page to be removed from tlb.
+    if ((old_kernel_pte = walkpgdir(cpu->kpgdir, (void *) old_va, 0)) != 0) {         
+      *old_kernel_pte = 0;
+    }     
+    else{
+      pte_t *pde;
+      pde = &cpu->kpgdir[PDX(old_va)];
+      char * v = p2v(PTE_ADDR(*pde));
+      kfree(v);
+    }
+  }
 
     // Shift FIFO queue.
     int index;
     for (index=0; index<TLBSIZE-1; index++){
-       tlb[index] = tlb[index+1];
+       cpu->tlb[index] = cpu->tlb[index+1];
     }
 
-    va = (void*)rcr2();   // va of the faulty page table is saved in cr2 register.
+  cpu->tlb[TLBSIZE-1] = va; // Store found va at the end of the queue.
 
-    if ((proc_pte = walkpgdir(proc->pgdir, va, 0)) == 0){ // Get page table address in process page dir.
+  // Get page table address in process page dir.
+    if ((proc_pte = walkpgdir(proc->pgdir, (void *) va, 0)) == 0){ 
       panic("bad process memory access");
     }
 
-    tlb[TLBSIZE] = va; // Store found va at the end of the queue.
+    // Allocate new entry in kernel page dir.
+    if ((kernel_pte = walkpgdir(cpu->kpgdir, (void *) va, 1)) == 0){ 
+      panic("bad kernel memory allocation");
+    }
 
-    kernel_pte = walkpgdir(cpu->kpgdir, va, 1); // Allocate new entry in kernel page dir.
-    
-    memmove((void*)kernel_pte, (void*)proc_pte, NPDENTRIES); // Copy the process page over to the kernel page.
+    //cprintf("ALLOCATED AT PDX %p!\n", PDX(va));
+         
+    *kernel_pte = *proc_pte;
+
+    popcli();
     break;
   }
-
+   
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){

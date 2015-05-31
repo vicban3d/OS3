@@ -7,7 +7,7 @@
 #include "x86.h"
 #include "elf.h"
 
-extern void freekvm();
+extern void freekvm(void);
 
 int
 exec(char *path, char **argv)
@@ -94,9 +94,8 @@ exec(char *path, char **argv)
   proc->sz = sz;
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
-  freekvm();
-
   switchuvm(proc);
+  freekvm();
   freevm(oldpgdir);
   return 0;
 

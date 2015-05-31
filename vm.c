@@ -11,15 +11,20 @@ extern char data[];  // defined by kernel.ld
 struct segdesc gdt[NSEGS];
 
 void freekvm(){
-    int i;
-    for(i = 0; i < NPDENTRIES/2; i++){
-      if(cpu->kpgdir[i] & PTE_P){
-        char * va = p2v(PTE_ADDR(cpu->kpgdir[i]));
-        kfree(va);
-      }
-      cpu->kpgdir[i] = 0;
+    pushcli();
+  uint i;
+  for(i = 0; i < NPDENTRIES/2; i++){
+    if(cpu->kpgdir[i] & PTE_P){
+      char * va = p2v(PTE_ADDR(cpu->kpgdir[i]));
+      kfree(va);
     }
+    cpu->kpgdir[i] = 0;
+  }
+  cpu->tlb_pages = 0;
+  popcli();
 }
+
+
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -42,14 +47,11 @@ seginit(void)
   // Map cpu, and curproc
   c->gdt[SEG_KCPU] = SEG(STA_W, &c->cpu, 8, 0);
 
-  memset(c->kpgdir, 0, 100);
-
   lgdt(c->gdt, sizeof(c->gdt));
   loadgs(SEG_KCPU << 3);
   
   // Initialize cpu-local storage.
   cpu = c;
-
   proc = 0;
 }
 
@@ -63,25 +65,19 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   pte_t *pgtab;
 
   pde = &pgdir[PDX(va)];
-
-  if(*pde & PTE_P){    
-    pgtab = (pte_t*)p2v(PTE_ADDR(*pde));    
+  if(*pde & PTE_P){
+    pgtab = (pte_t*)p2v(PTE_ADDR(*pde));
   } else {
-
-    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0){ 
-     // cprintf("message\n");
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
       return 0;
-    }
     // Make sure all those PTE_P bits are zero.
     memset(pgtab, 0, PGSIZE);
-
     // The permissions here are overly generous, but they can
     // be further restricted by the permissions in the page table 
     // entries, if necessary.
-
-    *pde = v2p(pgtab) | PTE_P | PTE_W | PTE_U;    
-  }  
-  return &pgtab[PTX(va)];  
+    *pde = v2p(pgtab) | PTE_P | PTE_W | PTE_U;
+  }
+  return &pgtab[PTX(va)];
 }
 
 // Create PTEs for virtual addresses starting at va that refer to
@@ -192,8 +188,7 @@ switchuvm(struct proc *p)
   ltr(SEG_TSS << 3);
   if(p->pgdir == 0)
     panic("switchuvm: no pgdir");
-
-  //lcr3(v2p(p->pgdir));  // switch to new address space
+  lcr3(v2p(p->pgdir));  // switch to new address space
   popcli();
 }
 
@@ -292,7 +287,6 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   }
   return newsz;
 }
-
 
 // Free a page table and all the physical memory pages
 // in the user part.

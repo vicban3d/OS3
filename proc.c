@@ -18,7 +18,6 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 extern void freekvm(void);
-
 static void wakeup1(void *chan);
 
 void
@@ -120,6 +119,7 @@ growproc(int n)
   }
   proc->sz = sz;
   switchuvm(proc);
+  freekvm();
   return 0;
 }
 
@@ -281,17 +281,11 @@ scheduler(void)
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-     
-      
-
       proc = p;
-
-      freekvm();
       switchuvm(p);
+      freekvm();
       p->state = RUNNING;
-
       swtch(&cpu->scheduler, proc->context);
-
       switchkvm(cpu);
 
       // Process is done running for now.
@@ -319,7 +313,6 @@ sched(void)
   if(readeflags()&FL_IF)
     panic("sched interruptible");
   intena = cpu->intena;
-
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
 }
