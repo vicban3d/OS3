@@ -23,7 +23,7 @@
 // TODO TIP - differentiate between task 1 and 2: you should check if it is mapped in the process or not.
 // TODO TIP - if malloc returns -1.
 
-kill the process.
+//kill the process.
 extern pte_t * walkpgdir(pde_t *, void *, int);
 
 // Interrupt descriptor table (shared by all CPUs).
