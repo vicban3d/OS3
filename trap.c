@@ -8,10 +8,7 @@
 #include "traps.h"
 #include "spinlock.h"
 
-// TODO - In copyuvm there is a panic("copyuvm: page not present")... should we delete this line and just continue copying
-// TODO - differentiate between task 1 and 2: you should check if it is mapped in the process or not.
-// TODO - if malloc returns -1.
-// TODO - remove the mempry allocation in sbrk().
+// TODO - remove the memory allocation in sbrk().
 // TODO - add the allocation of new pages in the trap handler.
 // TODO - move the user virtual memory allocation to the trap handler(follow sbrk() to find the code).
 // TODO - only map the single page that caused the fault.
@@ -21,6 +18,10 @@
 // TODO - move process size limitation from growproc() to sbrk().
 // TODO - perform regular handling when va > proc->sz.
 // TODO - perform regular handling when va is in page below the process stack.
+
+// TODO TIP - In copyuvm there is a panic("copyuvm: page not present")... should we delete this line and just continue copying
+// TODO TIP - differentiate between task 1 and 2: you should check if it is mapped in the process or not.
+// TODO TIP - if malloc returns -1.
 
 kill the process.
 extern pte_t * walkpgdir(pde_t *, void *, int);
